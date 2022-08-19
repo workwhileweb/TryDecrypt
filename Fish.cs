@@ -59,6 +59,7 @@
             while (!cancel.IsCancellationRequested)
             {
                 previousCount++;
+
                 for (var i = 0; i < bytes.Length; i++)
                 {
                     if (bytes[i] >= byte.MaxValue) bytes[i] = 0;
@@ -121,45 +122,63 @@
 
         private CancellationTokenSource? _cancel;
 
+        private void Message(string message, bool isError = true)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(() => { Message(message, isError); });
+                return;
+            }
+
+            var icon = isError ? MessageBoxIcon.Error : MessageBoxIcon.Exclamation;
+            MessageBox.Show(message, Text, MessageBoxButtons.OK,icon);
+        }
+
         private void buttonStartStop_Click(object sender, EventArgs e)
         {
             if (_cancel is null || _cancel.IsCancellationRequested)
             {
                 _cancel = new CancellationTokenSource();
                 
-                buttonStartStop.Text = @"running";
-
-                var preCount = string.IsNullOrWhiteSpace(textBoxCount.Text)?0: ulong.Parse(textBoxCount.Text);
-                var preKey = textBoxCurrentKey.Text;
-                var encryptedB64 = textBoxEncrypted.Text;
-                var decrypted = textBoxDecrypted.Text;
-
+                buttonStartStop.Text = @"stop";
+                
                 Task.Factory.StartNew(() =>
                 {
-                    try
+                    while(!_cancel.IsCancellationRequested)
                     {
-                        var (found, count, currentKeyHex) = BlowfishFindKey(_cancel.Token,
-                            decrypted,
-                            encryptedB64,
-                            preCount,
-                            preKey,
-                            Block,
-                            i => Invoke(() => textBoxCount.Text = i.ToString()),
-                            s => Invoke(() => textBoxCurrentKey.Text = s));
-                        
-                        Invoke(() => textBoxCount.Text = count.ToString());
-                        Invoke(() => textBoxCurrentKey.Text = currentKeyHex);
+                        var preCount = string.IsNullOrWhiteSpace(textBoxCount.Text) ? 0 : ulong.Parse(textBoxCount.Text);
+                        var preKey = textBoxCurrentKey.Text;
+                        var encryptedB64 = textBoxEncrypted.Text;
+                        var decrypted = textBoxDecrypted.Text;
 
-                        if (found) MessageBox.Show(nameof(found), Text, MessageBoxButtons.OK, MessageBoxIcon.Exclamation);
-                    }
-                    catch (Exception ex)
-                    {
-                        Invoke(() => MessageBox.Show(ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Error));
+                        try
+                        {
+                            var (found, count, currentKeyHex) = BlowfishFindKey(_cancel.Token,
+                                decrypted,
+                                encryptedB64,
+                                preCount,
+                                preKey,
+                                Block,
+                                i => Invoke(() => textBoxCount.Text = i.ToString()),
+                                s => Invoke(() => textBoxCurrentKey.Text = s));
+
+                            Invoke(() => textBoxCount.Text = count.ToString());
+                            Invoke(() => textBoxCurrentKey.Text = currentKeyHex);
+
+                            if (!found) continue;
+
+                            Message(nameof(found), false);
+                            return;
+                        }
+                        catch (Exception ex)
+                        {
+                            Message(ex.Message);
+                        }
                     }
                 }, _cancel.Token).ContinueWith(_ =>
                 {
                     _cancel = null;
-                    buttonStartStop.Text = @"start/stop";
+                    buttonStartStop.Text = @"start";
                 });
             }
             else
