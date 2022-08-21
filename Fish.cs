@@ -93,7 +93,7 @@
                 if (encrypt.Equals(encryptedB64)) return (true, previousCount, Convert.ToHexString(bytes));
 
                 if (previousCount % block != 0) continue;
-
+                
                 onBlockCount?.Invoke(previousCount);
                 onBlockKey?.Invoke(Convert.ToHexString(bytes));
             }
@@ -144,36 +144,33 @@
                 
                 Task.Factory.StartNew(() =>
                 {
-                    while(!_cancel.IsCancellationRequested)
+                    var preCount = string.IsNullOrWhiteSpace(textBoxCount.Text) ? 0 : ulong.Parse(textBoxCount.Text);
+                    var preKey = textBoxCurrentKey.Text;
+                    var encryptedB64 = textBoxEncrypted.Text;
+                    var decrypted = textBoxDecrypted.Text;
+
+                    try
                     {
-                        var preCount = string.IsNullOrWhiteSpace(textBoxCount.Text) ? 0 : ulong.Parse(textBoxCount.Text);
-                        var preKey = textBoxCurrentKey.Text;
-                        var encryptedB64 = textBoxEncrypted.Text;
-                        var decrypted = textBoxDecrypted.Text;
+                        var (found, count, currentKeyHex) = BlowfishFindKey(_cancel.Token,
+                            decrypted,
+                            encryptedB64,
+                            preCount,
+                            preKey,
+                            Block,
+                            i => Invoke(() => textBoxCount.Text = i.ToString()),
+                            s => Invoke(() => textBoxCurrentKey.Text = s));
 
-                        try
-                        {
-                            var (found, count, currentKeyHex) = BlowfishFindKey(_cancel.Token,
-                                decrypted,
-                                encryptedB64,
-                                preCount,
-                                preKey,
-                                Block,
-                                i => Invoke(() => textBoxCount.Text = i.ToString()),
-                                s => Invoke(() => textBoxCurrentKey.Text = s));
+                        Invoke(() => textBoxCount.Text = count.ToString());
+                        Invoke(() => textBoxCurrentKey.Text = currentKeyHex);
 
-                            Invoke(() => textBoxCount.Text = count.ToString());
-                            Invoke(() => textBoxCurrentKey.Text = currentKeyHex);
+                        if (!found) return;
 
-                            if (!found) continue;
-
-                            Message(nameof(found), false);
-                            return;
-                        }
-                        catch (Exception ex)
-                        {
-                            Message(ex.Message);
-                        }
+                        Message(nameof(found), false);
+                        return;
+                    }
+                    catch (Exception ex)
+                    {
+                        Message(ex.Message);
                     }
                 }, _cancel.Token).ContinueWith(_ =>
                 {
